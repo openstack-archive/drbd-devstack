@@ -1,12 +1,9 @@
 # check for service enabled
-if is_service_enabled drbd_devstack; then
-    if [[ "$1" == "source" ]]; then
-        # Initial source of lib script
-        source $(dirname "$0")/lib/drbd_devstack
-    fi
+if is_service_enabled drbd-devstack; then
 
     if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
         # Set up system services
+        source "$dir/devstack/lib/drbd_devstack"
         echo_summary "Configuring system services drbd_devstack"
         pre_install_drbd_devstack
 

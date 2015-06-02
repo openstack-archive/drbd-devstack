@@ -1,19 +1,12 @@
 #!/bin/bash
 # vim: set et ts=4 sw=4 ft=sh :
-# Can we set global variables here?
-# Hash to access LINBIT repositories
 FILES="$(dirname '$0')/files"
 
 function pre_install_drbd_devstack {
     # Install OS packages, if necessary
-    # see wget logic in https://github.com/openstack-dev/devstack/blob/master/pkg/elasticsearch.sh
-    # drbdmanage, drbd-dkms, drbd-utils
     if [[ ! -d ${FILES}  ]]; then
         mkdir ${FILES}
     fi
-    # drbd-dkms="drbd-dkms_9.0.0rc2-1_all.deb"
-    # drbd-utils="drbd-utils_8.9.2+linbit-1_amd64.deb"
-    # drbd-manage="python-drbdmanage_0.20-33_all.deb"
     packages=('drbd-utils_8.9.3rc1-1_amd64.deb' 'drbd8-utils_8.9.3rc1-1_amd64.deb' 'drbd-dkms_9.0.0rc3-1_all.deb' 'python-drbdmanage_0.34-1_all.deb');
     # get packages
     for p in "${packages[@]}"; do
@@ -47,7 +40,7 @@ function install_drbd_devstack {
     sudo sed -i "s/^volume-group\s*=.*/volume-group = ${DRBD_DATA_VG}/g" /etc/drbdmanaged-lvm.conf
 
     # allow the stack user access to drbdmanage
-    sudo echo << "EOF"  >  /etc/dbus-1/system.d/org.drbd.drbdmanaged-stack.conf
+    sudo tee /etc/dbus-1/system.d/org.drbd.drbdmanaged-stack.conf > /dev/null << "EOF"  
     <!DOCTYPE busconfig PUBLIC
         "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
         "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
