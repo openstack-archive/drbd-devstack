@@ -1,0 +1,169 @@
+#!/bin/bash
+# vim: set et ts=4 sw=4 ft=sh :
+
+
+function pre_install_drbd_devstack {
+    # Install OS packages, if necessary
+    if [[ ! -d "${FILES:?FILES not set yet}"  ]]; then
+        mkdir "${FILES}"
+    fi
+    packages=('drbd-utils_8.9.3rc1-1_amd64.deb' 'drbd8-utils_8.9.3rc1-1_amd64.deb' 'drbd-dkms_9.0.0rc3-1_all.deb' 'python-drbdmanage_0.34-1_all.deb');
+    # get packages
+    for p in "${packages[@]}"; do
+        if [[ ! -f "${FILES}/${p}" ]]; then
+            # If there are newer packages, change the download number here.
+            wget "http://openstack-ci-pkgs.linbit.com/packages/001/trusty/$p" -O "${FILES}/${p}"
+        fi
+    done
+    # install packages
+    for i in "${packages[@]}"; do
+        if [[ -f "${FILES}/${i}" ]]; then
+            echo "installing ${i}"
+            sudo dpkg -i "${FILES}/${i}" || true
+        fi
+    done
+    # now go fetch :)
+    echo   echo "installing deps"
+    #sudo apt-get update
+    sudo apt-get install -f -y
+    sudo apt-get install python-dbus -y
+    return 0
+}
+
+function install_drbd_devstack {
+    # Install the service.
+
+    # write /etc/drbdmanage*.conf
+    #echo "drbdctrl-vg     = $DRBD_DRBDCTRL_VG" >> /etc/drbdmanaged.conf
+    #echo "volume-group    = $DRBD_DATA_VG"     >> /etc/drbdmanaged-lvm.conf
+    sudo sed -i "s/^drbdctrl-vg\s*=.*/drbdctrl-vg = ${DRBD_DRBDCTRL_VG}/g" /etc/drbdmanaged.conf
+    sudo sed -i "s/^volume-group\s*=.*/volume-group = ${DRBD_DATA_VG}/g" /etc/drbdmanaged-lvm.conf
+    sudo sed -i "s/^volume-group\s*=.*/volume-group = ${DRBD_DATA_VG}/g" /etc/drbdmanaged-lvm-thinpool.conf
+    sudo sed -i "s/^storage-plugin\s*=.*/storage-plugin = drbdmanage.storage.lvm_thinpool_ng.LvmThinPoolNg/g" /etc/drbdmanaged.conf
+
+    # allow the stack user access to drbdmanage
+    sudo tee /etc/dbus-1/system.d/org.drbd.drbdmanaged-stack.conf > /dev/null << "EOF"
+    <!DOCTYPE busconfig PUBLIC
+        "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+        "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+    <busconfig>
+        <policy user="stack">
+            <allow send_destination="org.drbd.drbdmanaged"/>
+        </policy>
+    </busconfig>
+EOF
+
+    # done.
+}
+
+function _drbd_make_vg {
+    local vg_name="${1:?No VG name given}"
+    local vg_size="$2"
+    local vg_lo_dev="$3"
+
+    local vg_dev="/dev/${vg_lo_dev}"
+
+    # If the VG exists, there's nothing left to do.
+    if sudo vgdisplay | grep -q "${vg_name}" ; then
+        return
+    fi
+
+    # if the file exists, don't destroy it...
+    if [[ ! -f "${FILES}/${vg_name}" ]]; then
+        sudo truncate -s "${vg_size}" "${FILES}/${vg_name}"
+    fi
+
+    # if the loop device is present, don't recreate it...
+    if [[ ! -e "${vg_dev}" ]]; then
+        local vg_lo_minor="$(echo "${vg_lo_dev}" | sed 's/loop//g')"
+        sudo mknod -m 660 "${vg_dev}" b 7 "${vg_lo_minor}"
+    fi
+
+    # if the file is already assigned a loop device, don't reassign
+    if ! sudo losetup -a | grep "${vg_lo_dev}" | grep -q "${vg_name}" ; then
+        sudo losetup "${vg_dev}" "${FILES}/${vg_name}"
+    fi
+
+    local lvm_cfg="devices { global_filter=[ 'a|$vg_lo_dev|' ] }"
+
+#    # if the lvm.conf already accepts the loop device, don't insert it again
+#    if ! sudo grep -q "${vg_lo_dev}" /etc/lvm/lvm.conf ; then
+#        sudo sed -i.drbdctrl-bak "s/global_filter = \[ /global_filter = \[ \"a|${vg_lo_dev}|\", /g" /etc/lvm/lvm.conf
+#    fi
+
+    # if theres already a pv signature, don't try to recreate
+    if ! sudo pvdisplay | grep -q "${vg_lo_dev}" ; then
+        sudo pvscan --config "$lvm_cfg"
+
+        if sudo pvdisplay | grep -q "${vg_lo_dev}" ; then
+            sudo pvcreate --config "$lvm_cfg" "${vg_dev}"
+        fi
+    fi
+
+    # if theres already a vg, don't try to recreate
+    if ! sudo vgdisplay | grep -q "${vg_name}" ; then
+        sudo vgscan
+        if ! sudo vgdisplay | grep -q "${vg_name}" ; then
+            sudo vgcreate --config "$lvm_cfg" "${vg_name}" "${vg_dev}"
+        fi
+    fi
+
+}
+
+function configure_drbd_devstack {
+    # Configure the service.
+    # This gets called before starting the c-vol service; the next callback,
+    # init_drbd_devstack, is too late for that, so we need to make DRBDmanage
+    # operational here.
+    local be_name="${1:-drbdmanage}"
+
+    # Initialize and start the service.
+    # need to setup loopback device(s) for DRBD
+
+    _drbd_make_vg "${DRBD_DRBDCTRL_VG:?DRBD_DRBDCTRL_VG is not set}" "${DRBD_DRBDCTRL_VG_SZ}" "${DRBD_DRBDCTRL_LODEV}"
+
+    # Do the same thing for the DATA volume group
+    _drbd_make_vg "${DRBD_DATA_VG:?DRBD_DATA_VG is not set}" "${DRBD_DATA_VG_SZ}" "${DRBD_DATA_LODEV}"
+
+    # initialize drbdmanage
+    sudo drbdmanage init --quiet
+    sudo drbdmanage debug 'set loglevel=debug'
+
+    # FIXME: multi-node setups
+
+
+    iniset $CINDER_CONF "$be_name" volume_backend_name "$be_name"
+    iniset $CINDER_CONF "$be_name" volume_driver cinder.volume.drivers.drbdmanagedrv.DrbdManageDriver
+}
+
+function init_drbd_devstack {
+    true
+}
+
+function shutdown_drbd_devstack {
+    # Shut the service down.
+    # drbdadm down all
+    # drbdmanage shutdown --quiet
+    echo "shutdown drbd devstack"
+}
+
+function cleanup_drbd_devstack {
+    # Cleanup the service.
+    # something like
+    #     drbdmanage list-resource --short | xargs -l drbdmanage remove-resource
+    # ???
+    # drbdmanage resources -m | sed 's/,.*//g' | xargs -l drbdmanage remove-resource --quiet
+    echo "cleanup drbd devstack"
+}
+
+#debug main
+#source $(dirname '$0')/../settings
+#pre_install_drbd_devstack
+#install_drbd_devstack
+#configure_drbd_devstack
+#init_drbd_devstack
+
+# Tell emacs to use shell-script-mode
+## Local variables:
+## mode: shell-script
+## End:
