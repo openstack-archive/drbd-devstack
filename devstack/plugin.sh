@@ -1,12 +1,16 @@
-# check for service enabled
-if is_service_enabled drbd_devstack; then
-    if [[ "$1" == "source" ]]; then
-        # Initial source of lib script
-        source $(dirname "$0")/lib/drbd_devstack
-    fi
+
+# order of calls is
+#   pre_install_drbd_devstack
+#   install_drbd_devstack
+#   configure_drbd_devstack
+#   init_drbd_devstack
+
+if is_service_enabled drbd-devstack; then
 
     if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
+        source "$dir/devstack/settings"
         # Set up system services
+        source "$dir/devstack/lib/drbd_devstack"
         echo_summary "Configuring system services drbd_devstack"
         pre_install_drbd_devstack
 
@@ -28,14 +32,14 @@ if is_service_enabled drbd_devstack; then
 
     if [[ "$1" == "unstack" ]]; then
         # Shut down drbd_devstack services
-        # no-op
+        source "$dir/devstack/lib/drbd_devstack"
         shutdown_drbd_devstack
     fi
 
     if [[ "$1" == "clean" ]]; then
         # Remove state and transient data
         # Remember clean.sh first calls unstack.sh
-        # no-op
+        source "$dir/devstack/lib/drbd_devstack"
         cleanup_drbd_devstack
     fi
 fi
