@@ -137,6 +137,28 @@ function configure_drbd_devstack {
         sudo /sbin/lvcreate -L "${thinpool_size}"M -T "${DRBD_DATA_VG}/drbdthinpool"
     fi
 
+
+    # Deactivate udev calling blkid etc. on the DRBD backend devices - that is
+    # neither needed nor wanted, because blkid having the device open can race
+    # with DRBD attaching.
+    # This will result in a message like
+    #    kernel: [...] drbd CV_...: drbdX: open("/dev/...") failed with -16
+    # which means EBUSY
+    if ! grep 'ENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_' /lib/udev/rules.d/60-persistent-storage-dm.rules ; then
+        # Look for the DM_SUSPENDED line, and put another one behind it.
+        #   ENV{DM_SUSPENDED}=="1", GOTO="persistent_storage_dm_end"
+        # The label might have a different name (eg. on newer Debian),
+        # so let's look for it while we're at it.
+        sudo sed -i 's:DM_SUSPENDED.*=="1",.*GOTO="\(.*\)":&\nENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_*", GOTO="\1"\n:' /lib/udev/rules.d/60-persistent-storage-dm.rules
+    fi
+
+    if ! grep 'ENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_' /lib/udev/rules.d/80-btrfs-lvm.rules ; then
+        # The btrfs scan isn't wanted, too.
+        #   SUBSYSTEM!="block", GOTO="btrfs_lvm_end"
+        sudo sed -i 's:SUBSYSTEM.="block",.*GOTO="\(.*\)":&\nENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_*", GOTO="\1"\n:' /lib/udev/rules.d/80-btrfs-lvm.rules
+    fi
+
+
     # initialize drbdmanage
     sudo drbdmanage init --quiet
     sudo drbdmanage shutdown --quiet
