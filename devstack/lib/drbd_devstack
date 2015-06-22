@@ -92,7 +92,7 @@ function _drbd_make_vg {
         sudo losetup "${vg_dev}" "${FILES}/${vg_name}"
     fi
 
-    local lvm_cfg="devices { global_filter=[ 'a|$vg_lo_dev|' ] }"
+    local lvm_cfg="devices { global_filter=[ 'a|${vg_lo_dev}|' ] }"
 
 #    # if the lvm.conf already accepts the loop device, don't insert it again
 #    if ! sudo grep -q "${vg_lo_dev}" /etc/lvm/lvm.conf ; then
@@ -101,10 +101,10 @@ function _drbd_make_vg {
 
     # if theres already a pv signature, don't try to recreate
     if ! sudo pvdisplay | grep -q "${vg_lo_dev}" ; then
-        sudo pvscan --config "$lvm_cfg"
+        sudo pvscan --config "${lvm_cfg}"
 
         if sudo pvdisplay | grep -q "${vg_lo_dev}" ; then
-            sudo pvcreate --config "$lvm_cfg" "${vg_dev}"
+            sudo pvcreate --config "${lvm_cfg}" "${vg_dev}"
         fi
     fi
 
@@ -112,8 +112,18 @@ function _drbd_make_vg {
     if ! sudo vgdisplay | grep -q "${vg_name}" ; then
         sudo vgscan
         if ! sudo vgdisplay | grep -q "${vg_name}" ; then
-            sudo vgcreate --config "$lvm_cfg" "${vg_name}" "${vg_dev}"
+            sudo vgcreate --config "${lvm_cfg}" "${vg_name}" "${vg_dev}"
         fi
+    fi
+}
+
+function _modify_udev_file {
+    file="$1"
+    search="$2"
+    sed_cmd="$3"
+
+    if ! grep "${search}" "/lib/udev/rules.d/${file}" ; then
+        sudo sed -i "${sed_cmd}" "/lib/udev/rules.d/${file}"
     fi
 }
 
@@ -144,20 +154,20 @@ function configure_drbd_devstack {
     # This will result in a message like
     #    kernel: [...] drbd CV_...: drbdX: open("/dev/...") failed with -16
     # which means EBUSY
-    if ! grep 'ENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_' /lib/udev/rules.d/60-persistent-storage-dm.rules ; then
-        # Look for the DM_SUSPENDED line, and put another one behind it.
-        #   ENV{DM_SUSPENDED}=="1", GOTO="persistent_storage_dm_end"
-        # The label might have a different name (eg. on newer Debian),
-        # so let's look for it while we're at it.
-        sudo sed -i 's:DM_SUSPENDED.*=="1",.*GOTO="\(.*\)":&\nENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_*", GOTO="\1"\n:' /lib/udev/rules.d/60-persistent-storage-dm.rules
-    fi
+    _modify_udev_file 60-persistent-storage-dm.rules \
+        'ENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_' \
+        's:DM_SUSPENDED.*=="1",.*GOTO="\(.*\)":&\nENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_*", GOTO="\1"\n:'
+    _modify_udev_file 80-btrfs-lvm.rules \
+        'ENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_' \
+        's:SUBSYSTEM.="block",.*GOTO="\(.*\)":&\nENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_*", GOTO="\1"\n:'
 
-    if ! grep 'ENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_' /lib/udev/rules.d/80-btrfs-lvm.rules ; then
-        # The btrfs scan isn't wanted, too.
-        #   SUBSYSTEM!="block", GOTO="btrfs_lvm_end"
-        sudo sed -i 's:SUBSYSTEM.="block",.*GOTO="\(.*\)":&\nENV{DM_NAME}=="'"${DRBD_DATA_VG}"'-CV_*", GOTO="\1"\n:' /lib/udev/rules.d/80-btrfs-lvm.rules
-    fi
-
+    # The same can happen to the DRBDmanage control volume, too, of course!
+    _modify_udev_file 60-persistent-storage-dm.rules \
+        'ENV{DM_NAME}=="'"${DRBD_DRBDCTRL_VG}"'-.drbdctrl' \
+        's:DM_SUSPENDED.*=="1",.*GOTO="\(.*\)":&\nENV{DM_NAME}=="'"${DRBD_DRBDCTRL_VG}"'-.drbdctrl", GOTO="\1"\n:'
+    _modify_udev_file 80-btrfs-lvm.rules \
+        'ENV{DM_NAME}=="'"${DRBD_DRBDCTRL_VG}"'-.drbdctrl' \
+        's:SUBSYSTEM.="block",.*GOTO="\(.*\)":&\nENV{DM_NAME}=="'"${DRBD_DRBDCTRL_VG}"'-.drbdctrl", GOTO="\1"\n:'
 
     # initialize drbdmanage
     sudo drbdmanage init --quiet
