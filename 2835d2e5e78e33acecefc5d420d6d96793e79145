@@ -1,0 +1,8 @@
+Verified+2: Jenkins
+Code-Review+2: Philipp Marek <philipp.marek@linbit.com>
+Workflow+1: Philipp Marek <philipp.marek@linbit.com>
+Submitted-by: Jenkins
+Submitted-at: Fri, 31 Jul 2015 14:32:52 +0000
+Reviewed-on: https://review.openstack.org/206492
+Project: stackforge/drbd-devstack
+Branch: refs/heads/master
