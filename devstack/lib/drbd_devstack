@@ -7,12 +7,13 @@ function pre_install_drbd_devstack {
     if [[ ! -d "${FILES:?FILES not set yet}"  ]]; then
         mkdir "${FILES}"
     fi
-    packages=('drbd-utils_8.9.3rc1-1_amd64.deb' 'drbd8-utils_8.9.3rc1-1_amd64.deb' 'drbd-dkms_9.0.0rc3-1_all.deb' 'python-drbdmanage_0.36-1_all.deb');
+
+    packages=('drbd-utils_8.9.3-1_amd64.deb' 'drbd8-utils_8.9.3-1_amd64.deb' 'drbd-dkms_9.0.0-2_all.deb' 'python-drbdmanage_0.44.1_all.deb')
     # get packages
     for p in "${packages[@]}"; do
         if [[ ! -f "${FILES}/${p}" ]]; then
             # If there are newer packages, change the download number here.
-            wget "http://openstack-ci-pkgs.linbit.com/packages/001/trusty/$p" -O "${FILES}/${p}"
+            wget "http://openstack-ci-pkgs.linbit.com/packages/002/trusty/$p" -O "${FILES}/${p}"
         fi
     done
     # install packages
@@ -22,9 +23,6 @@ function pre_install_drbd_devstack {
             sudo dpkg -i "${FILES}/${i}" || true
         fi
     done
-
-    # Hotfix, until DRBDmanage 0.42 is released.
-    sudo sed -i "s/NAME_MAXLEN\s*=.*/NAME_MAXLEN = 4095/" /usr/lib/python2.7/dist-packages/drbdmanage/storage/storagecore.py
 
     # now go fetch :)
     echo   echo "installing deps"
