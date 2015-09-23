@@ -116,12 +116,13 @@ function _drbd_make_vg {
 }
 
 function _modify_udev_file {
-    file="$1"
-    search="$2"
-    sed_cmd="$3"
+    local file="$1"
+    local search="$2"
+    local sed_cmd="$3"
+    local path="/lib/udev/rules.d/${file}"
 
-    if ! grep "${search}" "/lib/udev/rules.d/${file}" ; then
-        sudo sed -i "${sed_cmd}" "/lib/udev/rules.d/${file}"
+    if [[ -f "$path" ]] && ! grep "${search}" "$path"; then
+        sudo sed -i "${sed_cmd}" "$path"
     fi
 }
 
