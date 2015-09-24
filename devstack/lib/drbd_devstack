@@ -8,12 +8,18 @@ function pre_install_drbd_devstack {
         mkdir "${FILES}"
     fi
 
-    packages=('drbd-utils_8.9.3-1_amd64.deb' 'drbd8-utils_8.9.3-1_amd64.deb' 'drbd-dkms_9.0.0-2_all.deb' 'python-drbdmanage_0.44.1_all.deb')
+    packages=(
+        drbd8-utils_8.9.4-1_amd64.deb
+        drbd-dkms_9.0.0-2_all.deb
+        drbd-utils_8.9.4-1_amd64.deb
+        python-drbdmanage_0.50-1_all.deb
+    )
+
     # get packages
     for p in "${packages[@]}"; do
         if [[ ! -f "${FILES}/${p}" ]]; then
             # If there are newer packages, change the download number here.
-            wget "http://openstack-ci-pkgs.linbit.com/packages/002/trusty/$p" -O "${FILES}/${p}"
+            wget "http://openstack-ci-pkgs.linbit.com/packages/003/trusty/$p" -O "${FILES}/${p}"
         fi
     done
     # install packages
@@ -35,17 +41,14 @@ function pre_install_drbd_devstack {
 function install_drbd_devstack {
     # Install the service.
 
-    # write /etc/drbdmanage*.conf
-    #echo "drbdctrl-vg     = $DRBD_DRBDCTRL_VG" >> /etc/drbdmanaged.conf
-    #echo "volume-group    = $DRBD_DATA_VG"     >> /etc/drbdmanaged-lvm.conf
-    sudo sed -i "s/^drbdctrl-vg\s*=.*/drbdctrl-vg = ${DRBD_DRBDCTRL_VG}/g" /etc/drbdmanaged.conf
-    sudo sed -i "s/^volume-group\s*=.*/volume-group = ${DRBD_DATA_VG}/g" /etc/drbdmanaged-lvm.conf
-    sudo sed -i "s/^volume-group\s*=.*/volume-group = ${DRBD_DATA_VG}/g" /etc/drbdmanaged-lvm-thinpool.conf
-    sudo sed -i "s/^volume-group\s*=.*/volume-group = ${DRBD_DATA_VG}/g" /etc/drbdmanaged-lvm-thinlv.conf
-
-#    Use the single-thinpool driver for these tests.
-#    sudo sed -i "s/^storage-plugin\s*=.*/storage-plugin = drbdmanage.storage.lvm_thinpool_ng.LvmThinPoolNg/g" /etc/drbdmanaged.conf
-    sudo sed -i "s/^storage-plugin\s*=.*/storage-plugin = drbdmanage.storage.lvm_thinlv.LvmThinLv/g" /etc/drbdmanaged.conf
+    # Write DRBDmanage configuration;
+    # use the single-thinpool driver for these tests.
+    sudo sed -i "s/^drbdctrl-vg\s*=.*/drbdctrl-vg = ${DRBD_DRBDCTRL_VG}/g" /etc/drbdmanaged.cfg
+    echo "
+[Plugin:ThinLV]
+volume-group = $DRBD_DATA_VG
+pool-name = drbdthinpool
+    " | sudo tee -a /etc/drbdmanaged.cfg
 
     # allow the stack user access to drbdmanage
     sudo tee /etc/dbus-1/system.d/org.drbd.drbdmanaged-stack.conf > /dev/null << "EOF"
