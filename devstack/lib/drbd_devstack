@@ -8,7 +8,7 @@ function pre_install_drbd_devstack {
         mkdir "${FILES}"
     fi
 
-    packages=('drbd-utils_8.9.3-1_amd64.deb' 'drbd8-utils_8.9.3-1_amd64.deb' 'drbd-dkms_9.0.0-2_all.deb' 'python-drbdmanage_0.44.1_all.deb')
+    packages=('drbd-utils_8.9.3-1_amd64.deb' 'drbd8-utils_8.9.3-1_amd64.deb' 'drbd-dkms_9.0.0-2_all.deb' 'python-drbdmanage_0.50-1_all.deb')
     # get packages
     for p in "${packages[@]}"; do
         if [[ ! -f "${FILES}/${p}" ]]; then
