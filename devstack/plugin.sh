@@ -42,4 +42,15 @@ if is_service_enabled drbd-devstack; then
         source "$dir/devstack/lib/drbd_devstack"
         cleanup_drbd_devstack
     fi
+
+    if [[ "$1" == "make-a-storage-node" ]]; then
+        # Remove state and transient data
+        # Remember clean.sh first calls unstack.sh
+        source "$dir/devstack/settings"
+        source "$dir/devstack/lib/drbd_devstack"
+        pre_install_drbd_devstack
+		install_drbd_devstack
+		configure_drbd_devstack
+		init_drbd_devstack
+    fi
 fi
