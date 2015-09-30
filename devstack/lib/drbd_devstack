@@ -9,9 +9,9 @@ function pre_install_drbd_devstack {
     fi
 
     packages=(
+        drbd-utils_8.9.4-1_amd64.deb
         drbd8-utils_8.9.4-1_amd64.deb
         drbd-dkms_9.0.0-2_all.deb
-        drbd-utils_8.9.4-1_amd64.deb
         python-drbdmanage_0.50-1.1_all.deb
     )
 
@@ -22,19 +22,20 @@ function pre_install_drbd_devstack {
             wget "http://openstack-ci-pkgs.linbit.com/packages/003/trusty/$p" -O "${FILES}/${p}"
         fi
     done
+
     # install packages
+    sudo apt-get update
+    sudo apt-get install --yes debhelper python-dbus dbus lvm2 thin-provisioning-tools
     for i in "${packages[@]}"; do
         if [[ -f "${FILES}/${i}" ]]; then
             echo "installing ${i}"
-            sudo dpkg -i "${FILES}/${i}" || true
+            sudo dpkg --force-confnew --install "${FILES}/${i}" || true
         fi
     done
 
     # now go fetch :)
     echo   echo "installing deps"
-    #sudo apt-get update
-    sudo apt-get install -f -y
-    sudo apt-get install python-dbus -y
+    sudo apt-get install --fix-broken --yes
     return 0
 }
 
@@ -175,14 +176,41 @@ function configure_drbd_devstack {
         'ENV{DM_NAME}=="'"${DRBD_DRBDCTRL_VG}"'-.drbdctrl' \
         's:SUBSYSTEM.="block",.*GOTO="\(.*\)":&\nENV{DM_NAME}=="'"${DRBD_DRBDCTRL_VG}"'-.drbdctrl", GOTO="\1"\n:'
 
-    # initialize drbdmanage
-    sudo drbdmanage init --quiet
-    sudo drbdmanage shutdown --quiet
+    # drbdmanage modii: --no-control-volume --no-storage --no-autojoin
 
+
+    no_stor="${CINDER_DRBD_NO_STORAGE:+--no-storage}"
+
+    # initialize drbdmanage
+    if [[ -z "$SERVICE_HOST" ||
+        "$SERVICE_HOST" == "127.0.0.1" ||
+        "$SERVICE_HOST" == "$HOST_IP" ]] ; then
+        sudo drbdmanage init --quiet "$no_stor"
+    else
+        # Do we want $HOST_IP, or a possibly different one that should be reachable by the SERVICE_HOST?
+        # Is the $SERVICE_HOST always a drbdmanage node, or should we go to $CINDER_SERVICE_HOST?
+        # for now some debug output
+        set | grep SERVICE_HOST
+
+        local my_address="$HOST_IP"
+        if [[ -z "$my_address" ]] ; then
+            # Fallback, in case that script gets called standalone.
+            my_address="$(ip -oneline route get "$SERVICE_HOST" | grep "$SERVICE_HOST" | awk '/src (.*)/ { print $5 }')"
+        fi
+        echo "I am from $my_address" # ;)
+
+        no_cv="${CINDER_DRBD_NO_CV:+--no-control-volume}"
+
+        ssh -oBatchMode=yes -oStrictHostKeyChecking=no stack@"$SERVICE_HOST" \
+                sudo drbdmanage new-node --no-autojoin "$no_cv" "$no_stor" --quiet "$HOSTNAME" "$my_address"
+
+        ssh -oBatchMode=yes -oStrictHostKeyChecking=no stack@"$SERVICE_HOST" \
+                sudo drbdmanage howto-join "$HOSTNAME" --quiet | sudo bash
+    fi
+
+    sudo drbdmanage shutdown --quiet
     sudo drbdmanage debug 'set loglevel=debug'
     sudo drbdmanage nodes
-
-    # FIXME: multi-node setups
 
 
     iniset $CINDER_CONF "$be_name" volume_backend_name "$be_name"
