@@ -1,6 +1,9 @@
 #!/bin/bash
 # vim: set et ts=4 sw=4 ft=sh :
+#
 
+DRBDMANAGE_DBUS_AUTH_FILE=/etc/dbus-1/system.d/org.drbd.drbdmanaged-stack.conf
+DRBDBASEURL=http://openstack-ci-pkgs.linbit.com/packages/003/trusty
 
 function pre_install_drbd_devstack {
     # Install OS packages, if necessary
@@ -9,32 +12,35 @@ function pre_install_drbd_devstack {
     fi
 
     packages=(
+        drbd-utils_8.9.4-1_amd64.deb
         drbd8-utils_8.9.4-1_amd64.deb
         drbd-dkms_9.0.0-2_all.deb
-        drbd-utils_8.9.4-1_amd64.deb
-        python-drbdmanage_0.50-1.1_all.deb
+        python-drbdmanage_0.50-1.2_all.deb
     )
+
 
     # get packages
     for p in "${packages[@]}"; do
         if [[ ! -f "${FILES}/${p}" ]]; then
             # If there are newer packages, change the download number here.
-            wget "http://openstack-ci-pkgs.linbit.com/packages/003/trusty/$p" -O "${FILES}/${p}"
+            wget "$DRBDBASEURL/$p" -O "${FILES}/${p}"
         fi
     done
+
     # install packages
+    sudo apt-get update
+    sudo apt-get install --yes debhelper python-dbus dbus \
+        lvm2 thin-provisioning-tools
     for i in "${packages[@]}"; do
         if [[ -f "${FILES}/${i}" ]]; then
             echo "installing ${i}"
-            sudo dpkg -i "${FILES}/${i}" || true
+            sudo dpkg --force-confnew --install "${FILES}/${i}" || true
         fi
     done
 
     # now go fetch :)
     echo   echo "installing deps"
-    #sudo apt-get update
-    sudo apt-get install -f -y
-    sudo apt-get install python-dbus -y
+    sudo apt-get install --fix-broken --yes
     return 0
 }
 
@@ -43,7 +49,8 @@ function install_drbd_devstack {
 
     # Write DRBDmanage configuration;
     # use the single-thinpool driver for these tests.
-    sudo sed -i "s/^drbdctrl-vg\s*=.*/drbdctrl-vg = ${DRBD_DRBDCTRL_VG}/g" /etc/drbdmanaged.cfg
+    sudo sed -i "s/^drbdctrl-vg\s*=.*/drbdctrl-vg = ${DRBD_DRBDCTRL_VG}/g" \
+        /etc/drbdmanaged.cfg
     echo "
 [LOCAL]
 storage-plugin = drbdmanage.storage.lvm_thinlv.LvmThinLv
@@ -55,7 +62,7 @@ pool-name = drbdthinpool
     " | sudo tee /etc/drbdmanaged.cfg
 
     # allow the stack user access to drbdmanage
-    sudo tee /etc/dbus-1/system.d/org.drbd.drbdmanaged-stack.conf > /dev/null << "EOF"
+    sudo tee "$DRBDMANAGE_DBUS_AUTH_FILE" > /dev/null << "EOF"
     <!DOCTYPE busconfig PUBLIC
         "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
         "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
@@ -67,6 +74,10 @@ pool-name = drbdthinpool
 EOF
 
     # done.
+}
+
+function _find_lo_for_dev {
+    sudo losetup -a | grep "$1"
 }
 
 function _drbd_make_vg {
@@ -93,7 +104,7 @@ function _drbd_make_vg {
     fi
 
     # if the file is already assigned a loop device, don't reassign
-    if ! sudo losetup -a | grep "${vg_lo_dev}" | grep -q "${vg_name}" ; then
+    if ! _find_lo_for_dev "${vg_lo_dev}" | grep -q "${vg_name}" ; then
         sudo losetup "${vg_dev}" "${FILES}/${vg_name}"
     fi
 
@@ -133,6 +144,12 @@ function _modify_udev_file {
     fi
 }
 
+function _this_is_the_initial_node {
+    [[ -z "$SERVICE_HOST" ||
+        "$SERVICE_HOST" == "127.0.0.1" ||
+        "$SERVICE_HOST" == "$HOST_IP" ]]
+}
+
 function configure_drbd_devstack {
     # Configure the service.
     # This gets called before starting the c-vol service; the next callback,
@@ -143,12 +160,18 @@ function configure_drbd_devstack {
     # Initialize and start the service.
     # need to setup loopback device(s) for DRBD
 
-    _drbd_make_vg "${DRBD_DRBDCTRL_VG:?DRBD_DRBDCTRL_VG is not set}" "${DRBD_DRBDCTRL_VG_SZ}" "${DRBD_DRBDCTRL_LODEV}"
+    _drbd_make_vg "${DRBD_DRBDCTRL_VG:?DRBD_DRBDCTRL_VG is not set}" \
+        "${DRBD_DRBDCTRL_VG_SZ}" "${DRBD_DRBDCTRL_LODEV}"
 
     # Do the same thing for the DATA volume group
-    _drbd_make_vg "${DRBD_DATA_VG:?DRBD_DATA_VG is not set}" "${DRBD_DATA_VG_SZ}" "${DRBD_DATA_LODEV}"
+    _drbd_make_vg "${DRBD_DATA_VG:?DRBD_DATA_VG is not set}" \
+        "${DRBD_DATA_VG_SZ}" "${DRBD_DATA_LODEV}"
 
-    local thinpool_size=$(echo $(LC_ALL=C sudo vgdisplay --columns  --units M --noheadings -o vg_free --nosuffix "${DRBD_DATA_VG}") \* 30 / 32 - 64 | bc)
+    local vg_size=$(LC_ALL=C sudo vgdisplay --columns  --units M \
+        --noheadings -o vg_free --nosuffix "${DRBD_DATA_VG}")
+    # No quotes, so that the whitespace around the number gets eaten by the shell
+    local thinpool_size=$( echo $vg_size \* 30 / 32 - 64 | bc )
+
     if ! sudo lvdisplay "${DRBD_DATA_VG}/drbdthinpool" ; then
         sudo /sbin/lvcreate -L "${thinpool_size}"M -T "${DRBD_DATA_VG}/drbdthinpool"
     fi
@@ -175,14 +198,41 @@ function configure_drbd_devstack {
         'ENV{DM_NAME}=="'"${DRBD_DRBDCTRL_VG}"'-.drbdctrl' \
         's:SUBSYSTEM.="block",.*GOTO="\(.*\)":&\nENV{DM_NAME}=="'"${DRBD_DRBDCTRL_VG}"'-.drbdctrl", GOTO="\1"\n:'
 
-    # initialize drbdmanage
-    sudo drbdmanage init --quiet
-    sudo drbdmanage shutdown --quiet
+    # drbdmanage modii: --no-control-volume --no-storage --no-autojoin
 
+
+    no_stor="${CINDER_DRBD_NO_STORAGE:+--no-storage}"
+
+    # initialize drbdmanage
+    if _this_is_the_initial_node ; then
+        sudo drbdmanage init --quiet "$no_stor"
+    else
+        # Do we want $HOST_IP, or a possibly different one that should be reachable by the SERVICE_HOST?
+        # Is the $SERVICE_HOST always a drbdmanage node, or should we go to $CINDER_SERVICE_HOST?
+        # for now some debug output
+        set | grep SERVICE_HOST
+
+        local my_address="$HOST_IP"
+        if [[ -z "$my_address" ]] ; then
+            # Fallback, in case that script gets called standalone.
+            my_address="$(ip -oneline route get "$SERVICE_HOST" | \
+                grep "$SERVICE_HOST" | awk '/src (.*)/ { print $5 }')"
+        fi
+        echo "I am from $my_address" # ;)
+
+        no_cv="${CINDER_DRBD_NO_CV:+--no-control-volume}"
+
+        ssh -oBatchMode=yes -oStrictHostKeyChecking=no stack@"$SERVICE_HOST" \
+                sudo drbdmanage new-node --no-autojoin "$no_cv" "$no_stor" \
+                    --quiet "$HOSTNAME" "$my_address"
+
+        ssh -oBatchMode=yes -oStrictHostKeyChecking=no stack@"$SERVICE_HOST" \
+                sudo drbdmanage howto-join "$HOSTNAME" --quiet | sudo bash
+    fi
+
+    sudo drbdmanage shutdown --quiet
     sudo drbdmanage debug 'set loglevel=debug'
     sudo drbdmanage nodes
-
-    # FIXME: multi-node setups
 
 
     iniset $CINDER_CONF "$be_name" volume_backend_name "$be_name"
