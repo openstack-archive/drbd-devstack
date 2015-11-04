@@ -236,8 +236,11 @@ function configure_drbd_devstack {
     sudo drbdmanage nodes
 
 
-    iniset $CINDER_CONF "$be_name" volume_backend_name "$be_name"
-    iniset $CINDER_CONF "$be_name" volume_driver cinder.volume.drivers.drbdmanagedrv.DrbdManageDriver
+    if [[ -n "$CINDER_CONF" && -f "$CINDER_CONF" ]] ; then
+        iniset $CINDER_CONF "$be_name" volume_backend_name "$be_name"
+        iniset $CINDER_CONF "$be_name" volume_driver \
+            cinder.volume.drivers.drbdmanagedrv.DrbdManageDriver
+    fi
 }
 
 function init_drbd_devstack {
