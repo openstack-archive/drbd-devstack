@@ -12,4 +12,18 @@ This plugin helps to install the DRBD backend for Cinder
 Usage
 -----
 
-????
+Put some lines similar to these in your `local.conf`:
+
+    enable_plugin drbd-devstack git://git.openstack.org/stackforge/drbd-devstack
+    enable_service drbd-devstack
+    CINDER_ENABLED_BACKENDS=drbd:drbdmanage
+
+
+A few environment variables can be set to modify the behaviour:
+
+  * `CINDER_DRBD_NO_STORAGE` means `--no-storage`
+  * `CINDER_DRBD_NO_CV` gets translated to `--no-control-volume`.
+    This is allowed only for additional nodes, and not the initial drbdmanage node that *has* to create a control volume.
+
+
+Secondary nodes are detected by having `$SERVICE_HOST` unequal to `$HOST_IP`, and therefore register themselves as additional nodes in drbdmanage.
