@@ -15,7 +15,7 @@ function pre_install_drbd_devstack {
         drbd-utils_8.9.4-1_amd64.deb
         drbd8-utils_8.9.4-1_amd64.deb
         drbd-dkms_9.0.0-2_all.deb
-        python-drbdmanage_0.50-1.2_all.deb
+        python-drbdmanage_0.50-1.3_all.deb
     )
 
 
