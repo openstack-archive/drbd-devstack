@@ -239,8 +239,7 @@ function configure_drbd_devstack {
     if [[ -n "$CINDER_CONF" && -f "$CINDER_CONF" ]] ; then
         iniset $CINDER_CONF "$be_name" volume_backend_name "$be_name"
 
-        # If the Cinder driver changes are upstream, this should become "DrbdManageIscsiDriver"
-        local driver=DrbdManageDriver
+        local driver=DrbdManageIscsiDriver
         if [[ -n "$CINDER_DRBD_USE_DRBD_PROTOCOL" ]] ; then
             driver=DrbdManageDrbdDriver
         fi
