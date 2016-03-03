@@ -3,7 +3,7 @@
 #
 
 DRBDMANAGE_DBUS_AUTH_FILE=/etc/dbus-1/system.d/org.drbd.drbdmanaged-stack.conf
-DRBDBASEURL=http://openstack-ci-pkgs.linbit.com/packages/004/trusty
+DRBDBASEURL=http://openstack-ci-pkgs.linbit.com/packages/005/trusty
 
 function pre_install_drbd_devstack {
     # Install OS packages, if necessary
@@ -15,7 +15,7 @@ function pre_install_drbd_devstack {
         drbd-utils_8.9.6+linbit-1_amd64.deb
         drbd8-utils_8.9.6+linbit-1_amd64.deb
         drbd-dkms_9.0.1+linbit-1_all.deb
-        python-drbdmanage_0.91-1_all.deb
+        python-drbdmanage_0.93-1_all.deb
     )
 
 
