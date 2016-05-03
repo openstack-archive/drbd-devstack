@@ -3,7 +3,6 @@
 #
 
 DRBDMANAGE_DBUS_AUTH_FILE=/etc/dbus-1/system.d/org.drbd.drbdmanaged-stack.conf
-DRBDBASEURL=http://openstack-ci-pkgs.linbit.com/packages/005/trusty
 
 function pre_install_drbd_devstack {
     # Install OS packages, if necessary
@@ -11,36 +10,18 @@ function pre_install_drbd_devstack {
         mkdir "${FILES}"
     fi
 
-    packages=(
-        drbd-utils_8.9.6+linbit-1_amd64.deb
-        drbd8-utils_8.9.6+linbit-1_amd64.deb
-        drbd-dkms_9.0.1+linbit-1_all.deb
-        python-drbdmanage_0.93-3_all.deb
-    )
+    sudo add-apt-repository ppa:linbit/linbit-drbd9-stack
 
-
-    # get packages
-    for p in "${packages[@]}"; do
-        if [[ ! -f "${FILES}/${p}" ]]; then
-            # If there are newer packages, change the download number here.
-            wget "$DRBDBASEURL/$p" -O "${FILES}/${p}"
-        fi
-    done
-
-    # install packages
+    # install packages normally
     sudo apt-get update
     sudo apt-get install --yes debhelper python-dbus dbus \
-        lvm2 thin-provisioning-tools
-    for i in "${packages[@]}"; do
-        if [[ -f "${FILES}/${i}" ]]; then
-            echo "installing ${i}"
-            sudo dpkg --force-confnew --install "${FILES}/${i}" || true
-        fi
-    done
+        lvm2 thin-provisioning-tools drbd-utils drbd-dkms python-drbdmanage
 
-    # now go fetch :)
-    echo   echo "installing deps"
-    sudo apt-get install --fix-broken --yes
+    # ensure we're starting with upstream config file, ie.
+    # overwrite local modifications, so that the automated
+    # processes later on work as intended
+    sudo apt-get install --reinstall -o Dpkg::Options::=--force-confnew python-drbdmanage
+
     return 0
 }
 
