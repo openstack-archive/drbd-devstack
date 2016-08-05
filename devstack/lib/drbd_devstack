@@ -14,13 +14,21 @@ function pre_install_drbd_devstack {
 
     # install packages normally
     sudo apt-get update
-    sudo apt-get install --yes debhelper python-dbus dbus \
+    sudo apt-get install --yes debhelper python-dbus dbus patch \
         lvm2 thin-provisioning-tools drbd-utils drbd-dkms python-drbdmanage
 
     # ensure we're starting with upstream config file, ie.
     # overwrite local modifications, so that the automated
     # processes later on work as intended
     sudo apt-get install --reinstall -o Dpkg::Options::=--force-confnew python-drbdmanage
+
+    # Hotfix needed? Avoid dput delay.
+    HOTFIXURL=http://openstack-ci-pkgs.linbit.com/hotfix/hf.patch
+    HOTFIXFILE="${FILES}/drbdhotfix.patch"
+    if wget -O "$HOTFIXFILE" "$HOTFIXURL" ; then
+        ( cd / ; sudo patch --dry-run --forward --verbose -p0 ) < "$HOTFIXFILE" &&
+        ( cd / ; sudo patch           --forward --verbose -p0 ) < "$HOTFIXFILE"
+    fi
 
     return 0
 }
