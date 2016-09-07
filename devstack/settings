@@ -1,5 +1,7 @@
 # Devstack settings
 
+enable_service drbd-devstack
+
 FILES="${FILES:-${TOP_DIR:-/tmp}/files}"
 TEMPEST_STORAGE_PROTOCOL=iSCSI
 DRBD_DRBDCTRL_VG_SZ=1G
