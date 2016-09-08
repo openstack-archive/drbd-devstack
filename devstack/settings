@@ -1,4 +1,4 @@
-# Devstack settings
+# Devstack settings 
 
 FILES="${FILES:-${TOP_DIR:-/tmp}/files}"
 TEMPEST_STORAGE_PROTOCOL=iSCSI
