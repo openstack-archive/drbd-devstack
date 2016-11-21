@@ -221,6 +221,7 @@ function configure_drbd_devstack {
     fi
 
     sudo drbdmanage shutdown --quiet
+    sudo drbdmanage wait-for-startup
     sudo drbdmanage debug 'set loglevel=debug'
     sudo drbdmanage nodes
 
