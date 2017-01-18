@@ -84,6 +84,7 @@ function _drbd_make_vg {
     # if the file exists, don't destroy it...
     if [[ ! -f "${FILES}/${vg_name}" ]]; then
         sudo truncate -s "${vg_size}" "${FILES}/${vg_name}"
+        sudo dd if="${FILES}/${vg_name}" of="${FILES}/${vg_name}" conv=notrunc bs=4M
     fi
 
     # if the loop device is present, don't recreate it...
