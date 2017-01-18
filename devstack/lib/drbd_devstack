@@ -166,6 +166,9 @@ function configure_drbd_devstack {
     fi
 
 
+    # temporary: dump the udev rules, for debugging.
+    grep . -r /lib/udev/rules.d/
+
     # Deactivate udev calling blkid etc. on the DRBD backend devices - that is
     # neither needed nor wanted, because blkid having the device open can race
     # with DRBD attaching.
