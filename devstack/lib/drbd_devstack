@@ -187,6 +187,10 @@ function configure_drbd_devstack {
         'ENV{DM_NAME}=="'"${DRBD_DRBDCTRL_VG}"'-.drbdctrl' \
         's:SUBSYSTEM.="block",.*GOTO="\(.*\)":&\nENV{DM_NAME}=="'"${DRBD_DRBDCTRL_VG}"'-.drbdctrl", GOTO="\1"\n:'
 
+    _modify_udev_file 69-lvm-metad.rules \
+        '#dont run pvscan ## lvm pvscan --cache --activate' \
+        's:^RUN+="/sbin/lvm pvscan --cache:# Dont run pvscan:'
+
     # drbdmanage modii: --no-control-volume --no-storage --no-autojoin
 
 
