@@ -15,7 +15,8 @@ function pre_install_drbd_devstack {
     # install packages normally
     sudo apt-get update
     sudo apt-get install --yes debhelper python-dbus dbus patch \
-        lvm2 thin-provisioning-tools drbd-utils drbd-dkms python-drbdmanage
+        lvm2 thin-provisioning-tools drbd-utils drbd-dkms python-drbdmanage \
+        linux-headers-$(uname -r)
 
     # ensure we're starting with upstream config file, ie.
     # overwrite local modifications, so that the automated
