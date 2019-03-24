@@ -14,7 +14,7 @@ Usage
 
 Put some lines similar to these in your `local.conf`:
 
-    enable_plugin drbd-devstack git://git.openstack.org/openstack/drbd-devstack
+    enable_plugin drbd-devstack https://git.openstack.org/openstack/drbd-devstack
     CINDER_ENABLED_BACKENDS=drbd:drbdmanage
 
 
